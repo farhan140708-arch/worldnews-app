@@ -13,6 +13,7 @@ const biasColors = {
 };
 
 const SAVE_KEY = "compass_saved_v1";
+const THEME_KEY = "compass_theme";
 
 const scopeSelect = document.getElementById("scope");
 const biasFilter = document.getElementById("biasFilter");
@@ -22,12 +23,38 @@ const refreshBtn = document.getElementById("refreshBtn");
 const lastUpdatedEl = document.getElementById("lastUpdated");
 const newsList = document.getElementById("newsList");
 const biasBar = document.getElementById("biasBar");
+const trendingSection = document.getElementById("trendingSection");
 const statusBanner = document.getElementById("statusBanner");
 const sourcesPanel = document.getElementById("sourcesPanel");
 const showSourcesLink = document.getElementById("showSourcesLink");
+const categoryNav = document.getElementById("categoryNav");
+const themeToggle = document.getElementById("themeToggle");
 
-let currentArticles = []; // last fetched set for the active region/bias filter
+let currentArticles = []; // last fetched set for the active region/bias/category filter
 let savedOnlyActive = false;
+let activeCategory = "World";
+
+// ---------- Theme ----------
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  themeToggle.textContent = theme === "dark" ? "☀️" : "🌙";
+  localStorage.setItem(THEME_KEY, theme);
+}
+applyTheme(localStorage.getItem(THEME_KEY) || "light");
+themeToggle.addEventListener("click", () => {
+  const current = document.documentElement.getAttribute("data-theme");
+  applyTheme(current === "dark" ? "light" : "dark");
+});
+
+// ---------- Country flags ----------
+
+function flagEmoji(countryCode) {
+  if (!countryCode || countryCode.length !== 2) return "🌐";
+  return countryCode
+    .toUpperCase()
+    .replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
+}
 
 // ---------- Saved articles (stored in this browser only) ----------
 
@@ -97,6 +124,49 @@ function findRelated(article, pool) {
   return matches;
 }
 
+// ---------- Trending: stories multiple outlets are covering right now ----------
+
+function computeTrending(articles) {
+  const used = new Set();
+  const clusters = [];
+  for (const a of articles) {
+    if (used.has(a.link)) continue;
+    const related = findRelated(a, articles);
+    if (related.length >= 2) {
+      const group = [a, ...related];
+      group.forEach((g) => used.add(g.link));
+      clusters.push(group);
+    }
+  }
+  clusters.sort((x, y) => y.length - x.length);
+  return clusters.slice(0, 5);
+}
+
+function renderTrending(articles) {
+  const clusters = computeTrending(articles);
+  if (!clusters.length) {
+    trendingSection.classList.add("hidden");
+    return;
+  }
+  const items = clusters
+    .map((group) => {
+      const lead = group[0];
+      const dots = group
+        .slice(0, 5)
+        .map((g) => `<span class="trending-dot" style="background:${biasColors[g.bias] || "var(--center)"}"></span>`)
+        .join("");
+      return `
+        <div class="trending-item">
+          <span class="trending-count">${group.length} outlets</span>
+          <a href="${lead.link}" target="_blank" rel="noopener">${escapeHtml(lead.title)}</a>
+          <span class="trending-dots">${dots}</span>
+        </div>`;
+    })
+    .join("");
+  trendingSection.innerHTML = `<p class="trending-title">🔥 Trending — covered across outlets</p><div class="trending-list">${items}</div>`;
+  trendingSection.classList.remove("hidden");
+}
+
 // ---------- Bias breakdown bar ----------
 
 function renderBiasBar(articles) {
@@ -137,6 +207,7 @@ function renderCard(a, pool) {
   const dateStr = a.pubDate ? new Date(a.pubDate).toLocaleString() : "";
   const saved = isSaved(a.link);
   const related = findRelated(a, pool);
+  const flag = a.countryCode === "GLOBAL" ? "🌐" : flagEmoji(a.countryCode);
 
   const relatedHtml = related.length
     ? `
@@ -165,7 +236,7 @@ function renderCard(a, pool) {
       </div>
       <h3><a href="${a.link}" target="_blank" rel="noopener">${escapeHtml(a.title)}</a></h3>
       <p>${escapeHtml(a.snippet)}</p>
-      <div class="meta">${escapeHtml(a.country)} · ${dateStr}</div>
+      <div class="meta">${flag} ${escapeHtml(a.country)} · ${dateStr}</div>
       ${relatedHtml}
     </div>
   `;
@@ -174,6 +245,7 @@ function renderCard(a, pool) {
 function renderCurrentView() {
   const displayed = getDisplayArticles();
   renderBiasBar(displayed);
+  renderTrending(currentArticles);
 
   if (!displayed.length) {
     const msg = savedOnlyActive
@@ -183,8 +255,8 @@ function renderCurrentView() {
     return;
   }
 
-  // Compare-coverage always matches against the full current region/bias
-  // set, so it still works while a search or the saved view narrows what's shown.
+  // Compare-coverage always matches against the full current filter set, so
+  // it still works while a search or the saved view narrows what's shown.
   const pool = currentArticles.length ? currentArticles : displayed;
   newsList.innerHTML = displayed.map((a) => renderCard(a, pool)).join("");
 }
@@ -249,12 +321,33 @@ async function loadCountries() {
   }
 }
 
+async function loadCategories() {
+  try {
+    const res = await fetch(`${API_BASE}/api/categories`);
+    const categories = await res.json();
+    categoryNav.innerHTML = categories
+      .map((c) => `<button class="cat-btn ${c === "World" ? "active" : ""}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`)
+      .join("");
+  } catch (err) {
+    // Non-fatal — World-only nav (already in the HTML) still works.
+  }
+}
+
+categoryNav.addEventListener("click", (e) => {
+  const btn = e.target.closest(".cat-btn");
+  if (!btn) return;
+  activeCategory = btn.dataset.cat;
+  categoryNav.querySelectorAll(".cat-btn").forEach((b) => b.classList.toggle("active", b === btn));
+  loadNews();
+});
+
 async function loadNews() {
   const country = scopeSelect.value;
   const bias = biasFilter.value;
   const params = new URLSearchParams();
   if (country && country !== "WORLD") params.set("country", country);
   if (bias) params.set("bias", bias);
+  if (activeCategory && activeCategory !== "World") params.set("category", activeCategory);
 
   newsList.innerHTML = `<p class="loading">Loading news…</p>`;
   try {
@@ -322,4 +415,5 @@ refreshBtn.addEventListener("click", async () => {
 
 setInterval(loadNews, 5 * 60 * 1000);
 
-loadCountries().then(loadNews);
+loadCountries();
+loadCategories().then(loadNews);

@@ -12,13 +12,22 @@
 <body>
   <header class="site-header">
     <div class="header-inner">
-      <div class="brand">
-        <span class="brand-mark">◐</span>
-        <span class="brand-name">Compass</span>
+      <div class="brand-row">
+        <div class="brand">
+          <span class="brand-mark">◐</span>
+          <span class="brand-name">Compass</span>
+        </div>
+        <button id="themeToggle" class="theme-toggle" title="Toggle dark mode">🌙</button>
       </div>
       <p class="tagline">Live world news, every source labeled by its editorial leaning — nothing here claims to be unbiased.</p>
     </div>
   </header>
+
+  <nav class="category-nav">
+    <div class="category-nav-inner" id="categoryNav">
+      <button class="cat-btn active" data-cat="World">World</button>
+    </div>
+  </nav>
 
   <div class="controls-bar">
     <div class="controls-inner">
@@ -55,6 +64,7 @@
 
   <main class="page">
     <div id="statusBanner" class="status-banner hidden"></div>
+    <div id="trendingSection" class="trending-section hidden"></div>
     <div id="biasBar" class="bias-bar hidden"></div>
 
     <div id="newsList" class="news-grid">
