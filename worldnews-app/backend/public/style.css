@@ -74,7 +74,7 @@ body {
   color: var(--muted);
   font-weight: 600;
 }
-select {
+select, #searchBox {
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -84,10 +84,25 @@ select {
   min-width: 150px;
   font-family: var(--font-sans);
 }
+#searchBox::placeholder { color: #9a9da3; }
 button {
   cursor: pointer;
   font-family: var(--font-sans);
   font-weight: 600;
+}
+.toggle-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 0.85rem;
+  align-self: end;
+}
+.toggle-btn.active {
+  background: #fff6e5;
+  border-color: #f0d99a;
+  color: #6b5210;
 }
 #refreshBtn {
   padding: 9px 16px;
@@ -96,6 +111,7 @@ button {
   background: var(--ink);
   color: white;
   font-size: 0.85rem;
+  align-self: end;
 }
 #refreshBtn:hover { opacity: 0.85; }
 .last-updated {
@@ -121,6 +137,31 @@ button {
   margin-bottom: 18px;
 }
 .status-banner.hidden { display: none; }
+
+/* ---------- Bias distribution bar ---------- */
+.bias-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.bias-bar.hidden { display: none; }
+.bias-bar-track {
+  flex: 1 1 240px;
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--border);
+  min-width: 160px;
+}
+.bias-bar-seg { height: 100%; }
+.bias-bar-legend { display: flex; gap: 10px; flex-wrap: wrap; }
+.bias-bar-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.bias-bar-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 
 /* ---------- News grid ---------- */
 .news-grid {
@@ -150,6 +191,19 @@ button {
   gap: 8px;
   margin-bottom: 8px;
 }
+
+.card-top-right { display: flex; align-items: center; gap: 6px; }
+
+.save-btn {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  color: #c9ccd1;
+  padding: 0 2px;
+  line-height: 1;
+}
+.save-btn.saved { color: #e0a52c; }
 
 .source-name {
   font-weight: 600;
@@ -192,6 +246,44 @@ button {
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
+}
+
+.compare-toggle {
+  background: none;
+  border: none;
+  color: var(--left);
+  font-size: 0.75rem;
+  text-align: left;
+  padding: 8px 0 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.compare-panel {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.compare-panel.hidden { display: none; }
+.compare-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+}
+.compare-item a { color: var(--ink); text-decoration: none; flex: 1; }
+.compare-item a:hover { text-decoration: underline; }
+.compare-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: white;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .loading, .empty {
