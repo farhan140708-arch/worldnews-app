@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>World News — with bias transparency</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>🌍 World News</h1>
+    <p class="tagline">Aggregated from ~20 outlets worldwide. Every source is labeled with its known editorial leaning — nothing here claims to be unbiased.</p>
+  </header>
+
+  <div class="controls">
+    <label for="scope">Show:</label>
+    <select id="scope">
+      <option value="WORLD">World (all sources)</option>
+    </select>
+
+    <label for="biasFilter">Bias filter:</label>
+    <select id="biasFilter">
+      <option value="">All</option>
+      <option value="Left">Left</option>
+      <option value="Lean Left">Lean Left</option>
+      <option value="Center">Center</option>
+      <option value="Lean Right">Lean Right</option>
+      <option value="Right">Right</option>
+      <option value="State-controlled">State-controlled</option>
+    </select>
+
+    <button id="refreshBtn">Refresh now</button>
+    <span id="lastUpdated" class="last-updated"></span>
+  </div>
+
+  <div id="sourcesPanelToggle"><a href="#" id="showSourcesLink">How are bias labels decided? / view all sources →</a></div>
+  <div id="sourcesPanel" class="sources-panel hidden"></div>
+
+  <main id="newsList" class="news-list">
+    <p class="loading">Loading news…</p>
+  </main>
+
+  <footer>
+    <p>Bias labels are approximate, editorially-compiled starting points — not a scientific measurement. Disagree with one? Edit <code>data/sources.json</code> in this app's code. Data refreshes automatically every 15 minutes.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

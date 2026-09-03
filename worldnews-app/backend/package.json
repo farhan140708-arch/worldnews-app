@@ -1,0 +1,20 @@
+{
+  "name": "worldnews-backend",
+  "version": "1.0.0",
+  "description": "Free, self-hosted world news aggregator with source bias transparency",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "node-cron": "^3.0.3",
+    "rss-parser": "^3.13.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
