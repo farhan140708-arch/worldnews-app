@@ -18,6 +18,7 @@ const THEME_KEY = "compass_theme";
 const scopeSelect = document.getElementById("scope");
 const biasFilter = document.getElementById("biasFilter");
 const searchBox = document.getElementById("searchBox");
+const searchScope = document.getElementById("searchScope");
 const savedToggle = document.getElementById("savedToggle");
 const refreshBtn = document.getElementById("refreshBtn");
 const lastUpdatedEl = document.getElementById("lastUpdated");
@@ -31,6 +32,7 @@ const categoryNav = document.getElementById("categoryNav");
 const themeToggle = document.getElementById("themeToggle");
 
 let currentArticles = []; // last fetched set for the active region/bias/category filter
+let allArticles = []; // everything, unfiltered — used so search can find a topic anywhere
 let savedOnlyActive = false;
 let activeCategory = "World";
 
@@ -141,7 +143,6 @@ function computeTrending(articles) {
   clusters.sort((x, y) => y.length - x.length);
   return clusters.slice(0, 5);
 }
-
 function renderTrending(articles) {
   const clusters = computeTrending(articles);
   if (!clusters.length) {
@@ -194,12 +195,15 @@ function renderBiasBar(articles) {
 // ---------- Rendering ----------
 
 function getDisplayArticles() {
-  let list = savedOnlyActive ? Object.values(getSavedMap()) : currentArticles;
   const q = searchBox.value.trim().toLowerCase();
   if (q) {
-    list = list.filter((a) => `${a.title} ${a.snippet || ""}`.toLowerCase().includes(q));
+    // A topic search looks across every category and region, not just the
+    // currently selected tab — "Iran US" should turn up results whether
+    // they landed in World, Politics, or Middle East.
+    const base = savedOnlyActive ? Object.values(getSavedMap()) : allArticles;
+    return base.filter((a) => `${a.title} ${a.snippet || ""}`.toLowerCase().includes(q));
   }
-  return list;
+  return savedOnlyActive ? Object.values(getSavedMap()) : currentArticles;
 }
 
 function renderCard(a, pool) {
@@ -244,20 +248,24 @@ function renderCard(a, pool) {
 
 function renderCurrentView() {
   const displayed = getDisplayArticles();
+  const searching = Boolean(searchBox.value.trim());
+  searchScope.textContent = searching ? "Searching all regions & categories" : "";
   renderBiasBar(displayed);
-  renderTrending(currentArticles);
+  renderTrending(allArticles.length ? allArticles : currentArticles);
 
   if (!displayed.length) {
     const msg = savedOnlyActive
       ? `You haven't saved anything yet — click the ☆ on any story to keep it here.`
+      : searching
+      ? `No articles matched "${escapeHtml(searchBox.value.trim())}" right now. Try a different word, or hit Refresh if the feed just loaded.`
       : `No articles matched right now. Try "World" or clear the bias filter, or hit Refresh — the backend may still be waking up (free hosting sleeps after inactivity).`;
     newsList.innerHTML = `<p class="empty">${msg}</p>`;
     return;
   }
 
-  // Compare-coverage always matches against the full current filter set, so
-  // it still works while a search or the saved view narrows what's shown.
-  const pool = currentArticles.length ? currentArticles : displayed;
+  // Compare-coverage always matches against the full article set, so it
+  // finds cross-region and cross-category coverage too.
+  const pool = allArticles.length ? allArticles : currentArticles.length ? currentArticles : displayed;
   newsList.innerHTML = displayed.map((a) => renderCard(a, pool)).join("");
 }
 
@@ -308,16 +316,46 @@ async function checkSourceHealth() {
 
 async function loadCountries() {
   try {
-    const res = await fetch(`${API_BASE}/api/countries`);
-    const countries = await res.json();
+    const [countriesRes, regionsRes] = await Promise.all([
+      fetch(`${API_BASE}/api/countries`),
+      fetch(`${API_BASE}/api/regions`),
+    ]);
+    const countries = await countriesRes.json();
+    const regions = await regionsRes.json();
+
+    if (regions.length) {
+      const regionGroup = document.createElement("optgroup");
+      regionGroup.label = "Regions";
+      for (const r of regions) {
+        const opt = document.createElement("option");
+        opt.value = `region:${r}`;
+        opt.textContent = r;
+        regionGroup.appendChild(opt);
+      }
+      scopeSelect.appendChild(regionGroup);
+    }
+
+    const countryGroup = document.createElement("optgroup");
+    countryGroup.label = "Countries";
     for (const c of countries) {
       const opt = document.createElement("option");
       opt.value = c.code;
       opt.textContent = c.name;
-      scopeSelect.appendChild(opt);
+      countryGroup.appendChild(opt);
     }
+    scopeSelect.appendChild(countryGroup);
   } catch (err) {
-    // Non-fatal — the world view still works without the country list.
+    // Non-fatal — the world view still works without the country/region list.
+  }
+}
+
+async function loadAllArticles() {
+  try {
+    const res = await fetch(`${API_BASE}/api/news`);
+    const data = await res.json();
+    allArticles = data.articles || [];
+  } catch (err) {
+    // Non-fatal — search just won't find results outside the current tab.
   }
 }
 
@@ -342,10 +380,14 @@ categoryNav.addEventListener("click", (e) => {
 });
 
 async function loadNews() {
-  const country = scopeSelect.value;
+  const scopeValue = scopeSelect.value;
   const bias = biasFilter.value;
   const params = new URLSearchParams();
-  if (country && country !== "WORLD") params.set("country", country);
+  if (scopeValue.startsWith("region:")) {
+    params.set("region", scopeValue.slice("region:".length));
+  } else if (scopeValue && scopeValue !== "WORLD") {
+    params.set("country", scopeValue);
+  }
   if (bias) params.set("bias", bias);
   if (activeCategory && activeCategory !== "World") params.set("category", activeCategory);
 
@@ -409,11 +451,15 @@ refreshBtn.addEventListener("click", async () => {
   } catch (err) {
     // still try to reload whatever is cached
   }
-  await loadNews();
+  await Promise.all([loadNews(), loadAllArticles()]);
   refreshBtn.textContent = "↻ Refresh";
 });
 
-setInterval(loadNews, 5 * 60 * 1000);
+setInterval(() => {
+  loadNews();
+  loadAllArticles();
+}, 5 * 60 * 1000);
 
 loadCountries();
+loadAllArticles();
 loadCategories().then(loadNews);

@@ -20,6 +20,13 @@
   --header-bg: #16181d;
   --header-text: #ffffff;
   --header-muted: #c7c9ce;
+
+  /* Buttons that need guaranteed contrast keep a fixed color pair instead
+     of following the theme — this is what broke the Refresh button before:
+     it used var(--ink) for background with hardcoded white text, so in dark
+     mode --ink flips light and the button becomes invisible white-on-white. */
+  --btn-bg: #16181d;
+  --btn-text: #ffffff;
 }
 
 [data-theme="dark"] {
@@ -129,6 +136,11 @@ body {
   color: var(--muted);
   font-weight: 600;
 }
+.search-scope-note {
+  font-size: 0.68rem;
+  color: var(--left);
+  min-height: 1em;
+}
 select, #searchBox {
   padding: 8px 12px;
   border-radius: 8px;
@@ -163,8 +175,8 @@ button {
   padding: 9px 16px;
   border-radius: 8px;
   border: none;
-  background: var(--ink);
-  color: white;
+  background: var(--btn-bg);
+  color: var(--btn-text);
   font-size: 0.85rem;
   align-self: end;
 }
