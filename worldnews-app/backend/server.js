@@ -96,6 +96,7 @@ async function fetchOneSource(source) {
       country: source.country,
       countryCode: source.countryCode,
       bias: source.bias,
+      category: source.category || "World",
       biasNote: source.note || "",
     }));
     return { ok: true, id: source.id, items };
@@ -143,7 +144,7 @@ async function refreshCache() {
 // --- API routes ---
 
 app.get("/api/news", (req, res) => {
-  const { country, bias } = req.query;
+  const { country, bias, category } = req.query;
   let articles = cache.articles;
 
   if (country && country.toUpperCase() !== "WORLD") {
@@ -154,12 +155,23 @@ app.get("/api/news", (req, res) => {
   if (bias) {
     articles = articles.filter((a) => a.bias.toLowerCase() === bias.toLowerCase());
   }
+  if (category && category.toLowerCase() !== "all") {
+    articles = articles.filter((a) => (a.category || "World").toLowerCase() === category.toLowerCase());
+  }
 
   res.json({
     lastUpdated: cache.lastUpdated,
     count: articles.length,
     articles,
   });
+});
+
+app.get("/api/categories", (req, res) => {
+  const seen = new Set();
+  for (const s of sources) seen.add(s.category || "World");
+  // Keep World first, then alphabetical — matches how a normal news site orders its nav.
+  const rest = Array.from(seen).filter((c) => c !== "World").sort();
+  res.json(["World", ...rest]);
 });
 
 app.get("/api/countries", (req, res) => {
