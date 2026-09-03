@@ -2,7 +2,7 @@
 // set this to your backend's full URL, e.g. "https://your-app.onrender.com".
 // Leave it empty to call the API on the same origin (e.g. running everything
 // from one server, or Netlify redirects/proxying to your backend).
-const API_BASE = ""; // <-- fill this in if frontend and backend are on different hosts
+  const API_BASE = "https://worldnews-app-xxxx.onrender.com";// <-- fill this in if frontend and backend are on different hosts
 
 const biasColors = {
   "Left": "var(--left)",
