@@ -95,6 +95,7 @@ async function fetchOneSource(source) {
       sourceName: source.name,
       country: source.country,
       countryCode: source.countryCode,
+      region: source.region || null,
       bias: source.bias,
       category: source.category || "World",
       biasNote: source.note || "",
@@ -144,13 +145,16 @@ async function refreshCache() {
 // --- API routes ---
 
 app.get("/api/news", (req, res) => {
-  const { country, bias, category } = req.query;
+  const { country, bias, category, region } = req.query;
   let articles = cache.articles;
 
   if (country && country.toUpperCase() !== "WORLD") {
     articles = articles.filter(
       (a) => a.countryCode && a.countryCode.toUpperCase() === country.toUpperCase()
     );
+  }
+  if (region) {
+    articles = articles.filter((a) => (a.region || "").toLowerCase() === region.toLowerCase());
   }
   if (bias) {
     articles = articles.filter((a) => a.bias.toLowerCase() === bias.toLowerCase());
@@ -164,6 +168,14 @@ app.get("/api/news", (req, res) => {
     count: articles.length,
     articles,
   });
+});
+
+app.get("/api/regions", (req, res) => {
+  const seen = new Set();
+  for (const s of sources) {
+    if (s.region) seen.add(s.region);
+  }
+  res.json(Array.from(seen).sort());
 });
 
 app.get("/api/categories", (req, res) => {
