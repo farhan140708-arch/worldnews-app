@@ -8,10 +8,19 @@ const sources = require("./data/sources.json");
 const PORT = process.env.PORT || 3000;
 const REFRESH_MINUTES = process.env.REFRESH_MINUTES || 15;
 const FETCH_TIMEOUT_MS = 10000;
+// Guards against many visitors hammering "Refresh now" at once, which would
+// otherwise fire a full RSS refetch (22+ outbound requests) per click and
+// risk getting this server's IP rate-limited or blocked by outlets.
+const MIN_MANUAL_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
 
 const parser = new Parser({
   timeout: FETCH_TIMEOUT_MS,
-  headers: { "User-Agent": "Mozilla/5.0 (compatible; WorldNewsAggregator/1.0)" },
+  headers: {
+    // A real browser UA. Generic "bot" UAs get blocked by several outlets' firewalls.
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/rss+xml, application/xml, text/xml, */*",
+  },
 });
 
 const app = express();
@@ -24,12 +33,54 @@ let cache = {
   lastUpdated: null,
   sourceStatus: {}, // which feeds succeeded/failed on last run
 };
+let lastRefreshTime = 0;
 
 function withTimeout(promise, ms) {
   return Promise.race([
     promise,
     new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
   ]);
+}
+
+// Turns raw RSS description/content into a clean, readable one- or
+// two-sentence summary: strips HTML tags and entities, then cuts at the
+// nearest sentence boundary instead of mid-word or mid-sentence.
+function summarize(raw, maxLen = 220) {
+  if (!raw) return "";
+  let text = raw.replace(/<[^>]*>/g, " ");
+  const entities = {
+    "&amp;": "&", "&quot;": '"', "&#39;": "'", "&apos;": "'",
+    "&lt;": "<", "&gt;": ">", "&nbsp;": " ", "&rsquo;": "'", "&lsquo;": "'",
+    "&rdquo;": '"', "&ldquo;": '"', "&mdash;": "—", "&ndash;": "–",
+  };
+  text = text.replace(/&amp;|&quot;|&#39;|&apos;|&lt;|&gt;|&nbsp;|&rsquo;|&lsquo;|&rdquo;|&ldquo;|&mdash;|&ndash;/g, (m) => entities[m]);
+  text = text.replace(/\s+/g, " ").trim();
+  if (text.length <= maxLen) return text;
+
+  const truncated = text.slice(0, maxLen);
+  const lastSentenceEnd = Math.max(truncated.lastIndexOf(". "), truncated.lastIndexOf("? "), truncated.lastIndexOf("! "));
+  if (lastSentenceEnd > maxLen * 0.4) {
+    return truncated.slice(0, lastSentenceEnd + 1);
+  }
+  const lastSpace = truncated.lastIndexOf(" ");
+  return truncated.slice(0, lastSpace > 0 ? lastSpace : maxLen).trim() + "…";
+}
+
+// A handful of common words to ignore when matching articles on the same
+// story across outlets (see "compare coverage" below).
+const STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "but", "of", "in", "on", "at", "to", "for",
+  "with", "from", "by", "as", "is", "are", "was", "were", "be", "been",
+  "this", "that", "it", "its", "after", "over", "into", "amid", "than",
+  "will", "says", "say", "said", "new", "how", "why", "what", "who",
+]);
+
+function significantWords(title) {
+  return (title || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !STOPWORDS.has(w));
 }
 
 async function fetchOneSource(source) {
@@ -39,7 +90,7 @@ async function fetchOneSource(source) {
       title: item.title || "(untitled)",
       link: item.link,
       pubDate: item.pubDate || item.isoDate || null,
-      snippet: (item.contentSnippet || item.summary || "").slice(0, 280),
+      snippet: summarize(item.contentSnippet || item.content || item.summary || item.description || ""),
       sourceId: source.id,
       sourceName: source.name,
       country: source.country,
@@ -54,6 +105,7 @@ async function fetchOneSource(source) {
 }
 
 async function refreshCache() {
+  lastRefreshTime = Date.now();
   console.log(`[${new Date().toISOString()}] Refreshing news cache...`);
   const results = await Promise.all(sources.map(fetchOneSource));
 
@@ -70,6 +122,11 @@ async function refreshCache() {
     const db = b.pubDate ? new Date(b.pubDate).getTime() : 0;
     return db - da;
   });
+
+  // Tag each article with its significant title words once, up front, so
+  // the frontend can group same-story coverage across outlets without any
+  // extra API calls or server work per request.
+  allArticles = allArticles.map((a) => ({ ...a, keywords: significantWords(a.title) }));
 
   cache = {
     articles: allArticles,
@@ -138,7 +195,13 @@ app.get("/api/status", (req, res) => {
 });
 
 app.get("/api/refresh", async (req, res) => {
-  // Manual trigger, useful for the free-tier "cron via external ping" setup described in README.
+  // Throttled: if someone already refreshed recently (including the
+  // scheduled cron), serve the existing cache instead of firing another
+  // full round of outbound RSS requests. Protects the server — and the
+  // outlets' feeds — when many people use the site at once.
+  if (Date.now() - lastRefreshTime < MIN_MANUAL_REFRESH_INTERVAL_MS) {
+    return res.json({ ok: true, lastUpdated: cache.lastUpdated, throttled: true });
+  }
   await refreshCache();
   res.json({ ok: true, lastUpdated: cache.lastUpdated });
 });
@@ -153,3 +216,4 @@ app.listen(PORT, () => {
   refreshCache(); // initial fetch on boot
   cron.schedule(`*/${REFRESH_MINUTES} * * * *`, refreshCache);
 });
+
